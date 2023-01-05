@@ -489,7 +489,10 @@ WritePC:
 OutputInstr:
     ldy #0
     lda (BP_DC),y
-    jsr WriteChar
+    cmp #10    ; write 10 as 13, to comply with other BF implementations
+    bne +
+    lda #13
++   jsr WriteChar
     rts
 
 ; Performs the input instruction
