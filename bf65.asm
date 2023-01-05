@@ -28,13 +28,14 @@
 ; Brackets are always in matched pairs, and can nest. A BF program with
 ; unmatched brackets is invalid and will not execute.
 ;
-; With BF65, you write BF programs using the MEGA65 BASIC line
-; editor. Any numbered line that begins with a BF character is recognized as a
-; line of BF code. Any other BASIC line is ignored, and any character on a line
-; of BF code that isn't a BF character is also ignored. [TODO: skipping of
-; lines that don't begin with a BF instruction is not implemented yet. Right
-; now it will recognize any BF character on any line as a BF instruction, and
-; ignore all other characters.]
+; With BF65, you write BF programs using the MEGA65 BASIC line editor. Any
+; numbered line that begins with a BF character is recognized as a line of BF
+; code. Any other BASIC line is ignored, and any character on a line of BF code
+; that isn't a BF character is also ignored. [TODO: skipping of lines that
+; don't begin with a BF instruction is not implemented yet. Right now it will
+; recognize any BF character on any line as a BF instruction, and ignore all
+; other characters, similar to a standard BF program with ignored line
+; numbers.]
 ;
 ; This allows you to combine BASIC commands and BF code in the same listing,
 ; like so:
@@ -50,11 +51,11 @@
 ; starting on line 30. BF65 ignores the commentary on lines 30-50 because they
 ; do not contain BF instructions.
 ;
-; (Note that this is not a combination of BASIC and BF in a single language.
+; Note that this is not a combination of BASIC and BF in a single language.
 ; The BF interpreter runs when you call SYS $1800, and it starts from the
 ; beginning of the listing and skips all of the non-BF characters. When you
 ; type RUN, the BASIC interpreter assumes it will only see BASIC commands up to
-; the END statement. It would be cool to have BF run inline with BASIC, but
+; the END statement. (It would be cool to have BF run inline with BASIC, but
 ; that's not what BF65 does.)
 ;
 ; A BF program can read a byte of input with the input (,) instruction. With
@@ -71,6 +72,16 @@
 ;
 ; When execution is complete, you can examine the final state of the BF data
 ; region using the MEGA65 MONITOR. The data region starts at $8800.
+;
+;   MONITOR
+;   M8800
+;
+; Brainf*ck resources:
+; - http://brainfuck.org/tests.b
+; - http://brainfuck.org/
+; - http://www.bf.doleczek.pl/
+; - https://curlie.org/Computers/Programming/Languages/Brainfuck
+
 
 !cpu m65
 !to "bf65.prg", cbm
