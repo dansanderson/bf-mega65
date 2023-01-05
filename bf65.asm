@@ -31,14 +31,8 @@
 ; With BF65, you write BF programs using the MEGA65 BASIC line editor. Any
 ; numbered line that begins with a BF character is recognized as a line of BF
 ; code. Any other BASIC line is ignored, and any character on a line of BF code
-; that isn't a BF character is also ignored. [TODO: skipping of lines that
-; don't begin with a BF instruction is not implemented yet. Right now it will
-; recognize any BF character on any line as a BF instruction, and ignore all
-; other characters, similar to a standard BF program with ignored line
-; numbers.]
-;
-; This allows you to combine BASIC commands and BF code in the same listing,
-; like so:
+; that isn't a BF character is also ignored. This allows you to combine BASIC
+; commands and BF code in the same listing, like so:
 ;
 ; 10 bank 0:bload "bf65":sys $1800:end
 ; 20 rem this program adds 2 and 5.
@@ -155,18 +149,12 @@ Initialize:
     rts   ; return with error
 +
 
-    ; Scan BASIC for first BF instruction, set PC
-    ; TODO: needs a new "next BF line" routine; use this to skip non-BF lines
-    ;       in NextPC also; as written, evals BF chars on BASIC lines
+    ; Scan BASIC for first BF line, set PC
     lda #<(basicStart + 4)
     sta BP_PC
     lda #>(basicStart + 4)
     sta BP_PC+1
-    jsr LoadInstr
-    cmp #$ff
-    bne +
-    jsr NextPC
-+
+    jsr NextLine
 
     lda #$00
     rts   ; return with success
@@ -255,6 +243,38 @@ LoadInstr:
     lda #$ff  ; non-BF char
 ++  rts
 
+; If value under PC is not null and not a BF instruction, advance to next BASIC
+; line that begins with a BF instruction, or to the terminating null of the
+; last line if none.
+NextLine:
+--
+    jsr LoadInstr
+    cmp #$ff
+    beq +   ; Value under PC is either null or BF instruction
+    rts
++
+-
+    inc BP_PC
+    bne +
+    inc BP_PC+1
++   ldy #0
+    lda (BP_PC),y
+    cmp #$00   ; end of line
+    bne -
+    ldy #2
+    lda (BP_PC),y
+    cmp #$00   ; end of program
+    bne +
+    rts
++   clc
+    lda BP_PC
+    adc #5
+    sta BP_PC
+    lda BP_PC+1
+    adc #0
+    sta BP_PC+1
+    bra --
+
 ; Scans the PC to the next BF instruction
 ; Sets overflow flag if past end (PC on null), otherwise clears
 NextPC:
@@ -270,7 +290,8 @@ NextPC:
 -   inc BP_PC
     bne +
     inc BP_PC+1
-+   jsr LoadInstr
++
+--  jsr LoadInstr
     cmp #$00
     beq +   ; end of line
     cmp #$ff
@@ -279,15 +300,17 @@ NextPC:
 
 +   ldy #2
     lda (BP_PC),y
-    beq ++     ; end of program, leave PC on null
-    clc        ; advance to first char of next line (PC+5)
-    lda #4     ; (5-1, because loop above will +1)
-    adc BP_PC
+    cmp #$00
+    beq ++  ; end of program
+    clc
+    lda BP_PC
+    adc #5
     sta BP_PC
-    lda #0
-    adc BP_PC+1
+    lda BP_PC+1
+    adc #0
     sta BP_PC+1
-    bra -
+    jsr NextLine
+    bra --
 
 ++  clv
     rts
