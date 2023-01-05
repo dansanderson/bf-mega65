@@ -559,3 +559,45 @@ BASIC_L3:
 BASIC_L4:
 !byte 0,0
 TEST_NextPC_BASIC_end = *
+
+
+; Writes A to terminal as hexadecimal number
+; Clobbers A and Y
+; (Only used for debugging)
+_WriteHexLower:
+    and #$0f
+    clc
+    adc #$30
+    cmp #$3a
+    bcc +
+    clc
+    adc #$07
++   jsr WriteChar
+    rts
+WriteHex:
+    tay
+    ror
+    ror
+    ror
+    ror
+    jsr _WriteHexLower
+    tya
+    jsr _WriteHexLower
+    rts
+
+; Writes the PC and the value at the PC as hex to the terminal
+; Clobbers A and Y
+; (Only used for debugging)
+WritePC:
+    lda BP_PC+1
+    jsr WriteHex
+    lda BP_PC
+    jsr WriteHex
+    lda #32
+    jsr WriteChar
+    ldy #0
+    lda (BP_PC),y
+    jsr WriteHex
+    lda #13
+    jsr WriteChar
+    rts

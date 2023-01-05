@@ -99,11 +99,45 @@ BP_endOfData = $07  ; 1 byte
 BP_nextBracket = $08
 BP_bracketC = $0a
 
+IN_IncDC = $b1
+IN_DecDC = $b3
+IN_IncData = $aa
+IN_DecData = $ab
+IN_Output = $2e
+IN_Input = $2c
+IN_LeftBracket = $5b
+IN_RightBracket = $5d
+
 * = $1800
 
 ; User entry point
 StartBF:
     jmp ActuallyStartBF
+
+!macro incPC .amount {
+    clc
+    lda BP_PC
+    adc #.amount
+    sta BP_PC
+    lda BP_PC+1
+    adc #0
+    sta BP_PC+1
+}
+
+!macro decPC .amount {
+    sec
+    lda BP_PC
+    sbc #.amount
+    sta BP_PC
+    lda BP_PC+1
+    sbc #0
+    sta BP_PC+1
+}
+
+!macro ldaFromPC .offset {
+    ldy #.offset
+    lda (BP_PC),y
+}
 
 BITThisToSetOverflow: rts
 
@@ -130,17 +164,8 @@ Initialize:
     ; Edge case: no BASIC program in memory
     lda basicStart
     bne +
-    lda #$00
-    tab
-    jsr _primm
-    !pet "no program in memory. ",0
-    lda #$16
-    tab
-    lda #$ff
-    rts   ; return with error
-+
-
-    jsr InitDC
+    jmp _ErrNoProgamInMemory
++   jsr InitDC
     jsr InitInput
 
     jsr BuildBracketPairs
@@ -149,7 +174,7 @@ Initialize:
     rts   ; return with error
 +
 
-    ; Scan BASIC for first BF line, set PC
+    ; Scan BASIC for first BF line
     lda #<(basicStart + 4)
     sta BP_PC
     lda #>(basicStart + 4)
@@ -164,24 +189,24 @@ Initialize:
 ; If A on non-BF char, A=$ff
 ; Else A=char
 LoadInstr:
-    ldy #0
-    lda (BP_PC),y
-    beq ++    ; null
-    cmp #$b1
+    +ldaFromPC 0
+    cmp #$00
     beq ++
-    cmp #$b3
+    cmp #IN_IncDC
     beq ++
-    cmp #$aa
+    cmp #IN_DecDC
     beq ++
-    cmp #$ab
+    cmp #IN_IncData
     beq ++
-    cmp #$2e
+    cmp #IN_DecData
     beq ++
-    cmp #$2c
+    cmp #IN_Output
     beq ++
-    cmp #$5b
+    cmp #IN_Input
     beq ++
-    cmp #$5d
+    cmp #IN_LeftBracket
+    beq ++
+    cmp #IN_RightBracket
     beq ++
     bra +
 ++  rts
@@ -192,15 +217,14 @@ LoadInstr:
     ; look behind for FE and convert.
     cmp #$fe
     bne +
-    ldy #1
-    lda (BP_PC),y
+    +ldaFromPC 1
     cmp #$52
     bne +++
-    lda #$b3
+    lda #IN_DecDC
     rts
 +++ cmp #$53
     bne +
-    lda #$b1
+    lda #IN_IncDC
     rts
 
 +   cmp #$52
@@ -209,70 +233,43 @@ LoadInstr:
     beq +++
     bra +
 +++
-    sec
-    lda BP_PC
-    sbc #1
-    sta BP_PC
-    lda BP_PC+1
-    sbc #0
-    sta BP_PC+1
-    ldy #0
-    lda (BP_PC),y
+    +decPC 1
+    +ldaFromPC 0
     tax
-    clc
-    lda BP_PC
-    adc #1
-    sta BP_PC
-    lda BP_PC+1
-    adc #0
-    sta BP_PC+1
+    +incPC 1
     cpx #$fe
     bne +
-    ldy #0
-    lda (BP_PC),y
+    +ldaFromPC 0
     cmp #$52
     bne +++
-    lda #$b3
+    lda #IN_DecDC
     rts
 +++ cmp #$53
     bne +
-    lda #$b1
+    lda #IN_IncDC
     rts
 
-+
-    lda #$ff  ; non-BF char
++   lda #$ff  ; non-BF char
 ++  rts
 
 ; If value under PC is not null and not a BF instruction, advance to next BASIC
 ; line that begins with a BF instruction, or to the terminating null of the
 ; last line if none.
 NextLine:
---
-    jsr LoadInstr
+--  jsr LoadInstr
     cmp #$ff
     beq +   ; Value under PC is either null or BF instruction
     rts
 +
--
-    inc BP_PC
-    bne +
-    inc BP_PC+1
-+   ldy #0
-    lda (BP_PC),y
+-   +incPC 1
+    +ldaFromPC 0
     cmp #$00   ; end of line
     bne -
-    ldy #2
-    lda (BP_PC),y
+    +ldaFromPC 2
     cmp #$00   ; end of program
     bne +
     rts
-+   clc
-    lda BP_PC
-    adc #5
-    sta BP_PC
-    lda BP_PC+1
-    adc #0
-    sta BP_PC+1
++   +incPC 5
     bra --
 
 ; Scans the PC to the next BF instruction
@@ -287,9 +284,7 @@ NextPC:
     rts
 +
 
--   inc BP_PC
-    bne +
-    inc BP_PC+1
+-   +incPC 1
 +
 --  jsr LoadInstr
     cmp #$00
@@ -298,17 +293,11 @@ NextPC:
     beq -   ; non-BF instruction
     bra ++
 
-+   ldy #2
-    lda (BP_PC),y
++   +ldaFromPC 2
     cmp #$00
     beq ++  ; end of program
     clc
-    lda BP_PC
-    adc #5
-    sta BP_PC
-    lda BP_PC+1
-    adc #0
-    sta BP_PC+1
+    +incPC 5
     jsr NextLine
     bra --
 
@@ -358,7 +347,7 @@ BuildBracketPairs:
 --- jsr LoadInstr
     cmp #$00
     beq +
-    cmp #$5b   ; open bracket: add to end of bracket list
+    cmp #IN_LeftBracket   ; open bracket: add to end of bracket list
     bne ++
     ; if BP_nextBracket==bracketPairsEnd, error: too many brackets
     lda BP_nextBracket
@@ -385,7 +374,7 @@ BuildBracketPairs:
     sta BP_nextBracket+1
     bra +++
 
-++  cmp #$5d   ; close bracket: set on latest unclosed bracket
+++  cmp #IN_RightBracket   ; close bracket: set on latest unclosed bracket
     bne +++
     lda BP_nextBracket
     sta BP_bracketC
@@ -441,32 +430,11 @@ BuildBracketPairs:
     bra +
 ++  jmp _ErrMismatchedBrackets
 
-+
-    lda #$00
++   lda #$00
     rts
 
-_ErrMismatchedBrackets:
-    lda #$00
-    tab
-    jsr _primm
-    !pet "error: mismatched brackets. ",0
-    lda #$16
-    tab
-    lda #$ff
-    rts
 
-_ErrTooManyBrackets:
-    lda #$00
-    tab
-    jsr _primm
-    !pet "error: too many bracket pairs, max 128 pairs. ",0
-    lda #$16
-    tab
-    lda #$ff
-    rts
-
-; Writes A to terminal
-; (Unnecessarily slow for long strings because it flips the base page twice.)
+; Writes A as PETSCII to terminal
 ; Clobbers A
 WriteChar:
     tax
@@ -476,47 +444,6 @@ WriteChar:
     jsr $ffd2    ; bsout
     lda #$16
     tab
-    rts
-
-; Writes A to terminal as hexadecimal number
-; Clobbers A and Y
-; (Only used for debugging)
-_WriteHexLower:
-    and #$0f
-    clc
-    adc #$30
-    cmp #$3a
-    bcc +
-    clc
-    adc #$07
-+   jsr WriteChar
-    rts
-WriteHex:
-    tay
-    ror
-    ror
-    ror
-    ror
-    jsr _WriteHexLower
-    tya
-    jsr _WriteHexLower
-    rts
-
-; Writes the PC and the value at the PC as hex to the terminal
-; Clobbers A and Y
-; (Only used for debugging)
-WritePC:
-    lda BP_PC+1
-    jsr WriteHex
-    lda BP_PC
-    jsr WriteHex
-    lda #32
-    jsr WriteChar
-    ldy #0
-    lda (BP_PC),y
-    jsr WriteHex
-    lda #13
-    jsr WriteChar
     rts
 
 ; Performs the output instruction
@@ -716,60 +643,50 @@ Step:
     bit BITThisToSetOverflow
     rts
 
-+   cmp #$b1
++   cmp #IN_IncDC
     bne ++
     jsr IncDCInstr
     bvc +   ; return error on overflow
     jmp _ErrOutOfRange
 
-++  cmp #$b3
+++  cmp #IN_DecDC
     bne ++
     jsr DecDCInstr
     bvc +   ; return error on overflow
     jmp _ErrOutOfRange
 
-++  cmp #$aa
+++  cmp #IN_IncData
     bne ++
     jsr IncDataInstr
     bra +
 
-++  cmp #$ab
+++  cmp #IN_DecData
     bne ++
     jsr DecDataInstr
     bra +
 
-++  cmp #$2e
+++  cmp #IN_Output
     bne ++
     jsr OutputInstr
     bra +
 
-++  cmp #$2c
+++  cmp #IN_Input
     bne ++
     jsr InputInstr
     ; ignore overflow: end of region is EOF
     bra +
 
-++  cmp #$5b
+++  cmp #IN_LeftBracket
     bne ++
     jsr LeftBracketInstr
     bra +
 
-++  cmp #$5d
+++  cmp #IN_RightBracket
     bne +
     jsr RightBracketInstr
 
 +   jsr NextPC
     lda #$00    ; return success
-    rts
-
-_ErrOutOfRange:
-    lda #$00
-    tab
-    jsr _primm
-    !pet "error: data cursor out of range. ",0
-    lda #$16
-    tab
-    lda #$ff
     rts
 
 ; Perform user call: start
@@ -796,4 +713,45 @@ ActuallyStartBF:
 ++
     lda #$00
     tab
+    rts
+
+
+_ErrNoProgamInMemory:
+    lda #$00
+    tab
+    jsr _primm
+    !pet "no program in memory. ",0
+    lda #$16
+    tab
+    lda #$ff
+    rts   ; return with error
+
+_ErrMismatchedBrackets:
+    lda #$00
+    tab
+    jsr _primm
+    !pet "error: mismatched brackets. ",0
+    lda #$16
+    tab
+    lda #$ff
+    rts
+
+_ErrTooManyBrackets:
+    lda #$00
+    tab
+    jsr _primm
+    !pet "error: too many bracket pairs, max 128 pairs. ",0
+    lda #$16
+    tab
+    lda #$ff
+    rts
+
+_ErrOutOfRange:
+    lda #$00
+    tab
+    jsr _primm
+    !pet "error: data cursor out of range. ",0
+    lda #$16
+    tab
+    lda #$ff
     rts
