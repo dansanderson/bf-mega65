@@ -6,7 +6,7 @@ minimalist experimental Turing-complete programming language with a funny name.
 It is written for the [MEGA65](https://mega65.org/) personal computer, in 45GS02
 assembly language.
 
-Download the `bf65.d81` disk image for a ready-to-run interpreter and example
+Download the [bf65.d81](https://github.com/dansanderson/bf-mega65/blob/main/bf65.d81) disk image for a ready-to-run interpreter and example
 programs.
 
 ## What is Brainf\*ck?
