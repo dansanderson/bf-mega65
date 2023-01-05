@@ -134,8 +134,9 @@ You can redirect this output to a file or printer using the CMD command.
 
 ## Building BF65
 
-`bf65.asm` is written for the ACME assembler. Assemble it to `bf65.prg` with
-this command:
+`bf65.asm` is written for the [ACME
+assembler](https://sourceforge.net/projects/acme-crossass/). Assemble it to
+`bf65.prg` with this command:
 
 ```shell
 acme bf65.asm
