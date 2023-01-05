@@ -6,5 +6,5 @@ BF65 is released under a GPL 3 license. For more information on how to use it,
 and the full license text:
   https://github.com/dansanderson/bf-mega65/
 
-dload "two-plus-five"
+dload "2-plus-5"
 run

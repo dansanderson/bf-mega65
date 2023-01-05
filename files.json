@@ -7,6 +7,9 @@
         {"file_path": "typeme.txt", "name": "typeme"},
         {"file_path": "bf65.prg", "name": "bf65"},
         {"name": "--------------"},
-        {"file_path": "two-plus-five.bas", "name": "two-plus-five"}
+        {"file_path": "2-plus-5.bas", "name": "2-plus-5"},
+        {"file_path": "2-plus-5-out.bas", "name": "2-plus-5-out"},
+        {"file_path": "hello.bas", "name": "hello"},
+        {"file_path": "rot13.bas", "name": "rot13"}
     ]
 }
