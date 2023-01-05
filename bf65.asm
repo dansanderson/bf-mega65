@@ -312,9 +312,6 @@ BuildBracketPairs:
     cmp #>bracketPairsEnd    ; (assumes bracketPairsEnd is $xx00)
     bne -
 
-    lda #'B'
-    jsr WriteChar  ; DEBUG: BuildBracketList start
-
     ; Scan program for brackets
     lda #<(basicStart + 4)
     sta BP_PC
@@ -329,8 +326,6 @@ BuildBracketPairs:
     beq +
     cmp #$5b   ; open bracket: add to end of bracket list
     bne ++
-    lda #'['
-    jsr WriteChar  ; DEBUG: BuildBracketList saw open bracket
     ; if BP_nextBracket==bracketPairsEnd, error: too many brackets
     lda BP_nextBracket
     cmp #<bracketPairsEnd
@@ -358,8 +353,6 @@ BuildBracketPairs:
 
 ++  cmp #$5d   ; close bracket: set on latest unclosed bracket
     bne +++
-    lda #']'
-    jsr WriteChar  ; DEBUG: BuildBracketList saw close bracket
     lda BP_nextBracket
     sta BP_bracketC
     lda BP_nextBracket+1
@@ -385,8 +378,6 @@ BuildBracketPairs:
     sta (BP_bracketC),y
 
 +++
-    lda #'.'
-    jsr WriteChar
     jsr NextPC
     bra ---
 
@@ -416,9 +407,7 @@ BuildBracketPairs:
     bra +
 ++  jmp _ErrMismatchedBrackets
 
-+   lda #'C'
-    jsr WriteChar  ; DEBUG: BuildBracketList end
-
++
     lda #$00
     rts
 
@@ -607,14 +596,76 @@ DecDataInstr:
     rts
 
 LeftBracketInstr:
-    ; TODO
-    ; Test byte under DC. If 0, find matching right bracket and set PC to that location.
-    rts
+    ldy #0
+    lda (BP_DC),y
+    cmp #$00
+    bne +
+    ; find matching right bracket and set PC to that location
+    lda #<bracketPairs
+    sta BP_bracketC
+    lda #>bracketPairs
+    sta BP_bracketC+1
+-   ldy #0
+    lda (BP_bracketC),y
+    cmp BP_PC
+    bne ++
+    ldy #1
+    lda (BP_bracketC),y
+    cmp BP_PC+1
+    bne ++
+    ldy #2
+    lda (BP_bracketC),y
+    sta BP_PC
+    ldy #3
+    lda (BP_bracketC),y
+    sta BP_PC+1
+    bra +
+++  clc
+    lda BP_bracketC
+    adc #4
+    sta BP_bracketC
+    lda BP_bracketC+1
+    adc #0
+    sta BP_bracketC+1
+    cmp #<bracketPairsEnd
+    bne -
++   rts
 
 RightBracketInstr:
-    ; TODO
-    ; Test byte under DC. If non-0, find matching left bracket and set PC to that location.
-    rts
+    ldy #0
+    lda (BP_DC),y
+    cmp #$00
+    beq +
+    ; find matching left bracket and set PC to that location
+    lda #<bracketPairs
+    sta BP_bracketC
+    lda #>bracketPairs
+    sta BP_bracketC+1
+-   ldy #2
+    lda (BP_bracketC),y
+    cmp BP_PC
+    bne ++
+    ldy #3
+    lda (BP_bracketC),y
+    cmp BP_PC+1
+    bne ++
+    ldy #0
+    lda (BP_bracketC),y
+    sta BP_PC
+    ldy #1
+    lda (BP_bracketC),y
+    sta BP_PC+1
+    bra +
+++  clc
+    lda BP_bracketC
+    adc #4
+    sta BP_bracketC
+    lda BP_bracketC+1
+    adc #0
+    sta BP_bracketC+1
+    cmp #<bracketPairsEnd
+    bne -
++   rts
 
 ; Performs one instruction
 ; Sets overflow flag if past end, otherwise clears
