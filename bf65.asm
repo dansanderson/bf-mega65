@@ -1,81 +1,6 @@
 ; Brainf*ck for MEGA65
-;
-; This is an interpreter for the Brainf*ck programming language, a minimalist
-; experimental Turing-complete programming language with a funny name.
-;
-; https://en.wikipedia.org/wiki/Brainfuck
-;
-; Your BF program consists of parameter-less instructions capable of manipulating
-; an array of bytes in memory, reading input, and writing output. A data cursor
-; points to a location in the array, and the instructions either manipulate the
-; byte in that location or move the data cursor. The sole control structure is
-; a pair of matching brackets capable of conditional execution and looping.
-;
-; There are eight possible instructions, each represented by a single
-; character.
-;
-;  >  Increment the data pointer.
-;  <  Decrement the data pointer.
-;  +  Increment the byte at the data pointer.
-;  -  Decrement the byte at the data pointer.
-;  .  Output the byte at the data pointer.
-;  ,  Accept one byte of input, and store it at the data pointer.
-;  [  If the byte at the data pointer is zero, jump to the instruction after
-;     the matching ].
-;  ]  If the byte at the data pointer is non-zero, jump to the instruction
-;     after the matching [.
-;
-; Brackets are always in matched pairs, and can nest. A BF program with
-; unmatched brackets is invalid and will not execute.
-;
-; With BF65, you write BF programs using the MEGA65 BASIC line editor. Any
-; numbered line that begins with a BF character is recognized as a line of BF
-; code. Any other BASIC line is ignored, and any character on a line of BF code
-; that isn't a BF character is also ignored. This allows you to combine BASIC
-; commands and BF code in the same listing, like so:
-;
-; 10 bank 0:bload "bf65":sys $1800:end
-; 20 rem this program adds 2 and 5.
-; 30 ++        set c0 to 2
-; 40 > +++++   set c1 to 5
-; 50 [ < + > - ]  loop: adding 1 to c0 and subtracting 1 from c1 until c1 is 0
-;
-; The first line (line 10) consists of BASIC commands to load BF65, run it,
-; then end the program. BF65 ignores lines 10 and 20, and finds BF instructions
-; starting on line 30. BF65 ignores the commentary on lines 30-50 because they
-; do not contain BF instructions.
-;
-; Note that this is not a combination of BASIC and BF in a single language.
-; The BF interpreter runs when you call SYS $1800, and it starts from the
-; beginning of the listing and skips all of the non-BF characters. When you
-; type RUN, the BASIC interpreter assumes it will only see BASIC commands up to
-; the END statement. (It would be cool to have BF run inline with BASIC, but
-; that's not what BF65 does.)
-;
-; A BF program can read a byte of input with the input (,) instruction. With
-; this implementation, input is read from memory, up to 256 bytes starting at
-; address $8500. The byte before the first null byte ($00), or the last byte of
-; the region, whichever comes first, is considered the last byte of the input
-; stream. Attempts to read beyond the last byte will have no effect. (According
-; to Wikipedia, this is the de facto standard handling of EOF in BF
-; implementations.)
-;
-; The output (.) instruction writes a character to the screen. There is no
-; limit to output length, though the screen will scroll just like other
-; terminal output.
-;
-; When execution is complete, you can examine the final state of the BF data
-; region using the MEGA65 MONITOR. The data region starts at $8800.
-;
-;   MONITOR
-;   M8800
-;
-; Brainf*ck resources:
-; - http://brainfuck.org/tests.b
-; - http://brainfuck.org/
-; - http://www.bf.doleczek.pl/
-; - https://curlie.org/Computers/Programming/Languages/Brainfuck
-
+; dddaaannn (dansanderson), January 2023
+; Released under GPL 3. See LICENSE.
 
 !cpu m65
 !to "bf65.prg", cbm
@@ -83,7 +8,7 @@
 _primm = $ff7d  ; print immediate built-in
 
 ; Starting addresses
-basicStart = $2001  ; TODO: get this from base page 0 instead of hard coding
+basicStart = $2001
 inputBytes = $8500
 bracketPairs = $8600
 bracketPairsEnd = $8800
@@ -99,6 +24,7 @@ BP_endOfData = $07  ; 1 byte
 BP_nextBracket = $08
 BP_bracketC = $0a
 
+; Instruction codes as they appear in BASIC memory (see LoadInstr)
 IN_IncDC = $b1
 IN_DecDC = $b3
 IN_IncData = $aa
