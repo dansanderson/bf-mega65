@@ -50,7 +50,7 @@ that isn't a BF character is also ignored. This allows you to combine BASIC
 commands and BF code in the same listing, like so:
 
 ```basic
-10 bank 0:bload "bf65":sys $1800:end
+10 bank 0:bload "bf65":sys $1800:print peek($8800):end
 20 rem this program adds 2 and 5. see $8800 for the answer.
 30 ++           set c0 to 2
 40 > +++++      set c1 to 5
@@ -58,8 +58,8 @@ commands and BF code in the same listing, like so:
 ```
 
 The first line (line 10) consists of BASIC commands to load BF65, run it,
-then end the program. You can execute this program with
-the RUN command.
+print a result from the BF data array, then end the program. You can execute
+this program with the RUN command.
 
 ```basic
 RUN
@@ -151,11 +151,15 @@ files ending in `.bas`. petcat is a tool included with the VICE suite of
 Commoodore emulators. To convert a `.bas` file to a MEGA65 PRG file:
 
 ```shell
-petcat -w65 -o program.prg -- program.bas
+petcat -w65 -o two-plus-five.prg -- two-plus-five.bas
 ```
 
 The `bf65_unittests.asm` file contains a bunch of sloppy test code I wrote
 along the way. It may or may not be useful to verify future changes.
+
+`makedisk.py` is a tool I use to build D81 disk images from projects. It uses
+`files.json` to describe the disk from local files. It requires the
+[d64](https://pypi.org/project/d64/) Python library.
 
 ## Porting BF65
 

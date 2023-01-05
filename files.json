@@ -1,0 +1,12 @@
+{
+    "disk_filename": "bf65.d81",
+    "disk_name": "bf65",
+    "disk_id": "bf",
+    "text_style": "topic-single",
+    "files": [
+        {"file_path": "typeme.txt", "name": "typeme"},
+        {"file_path": "bf65.prg", "name": "bf65"},
+        {"name": "--------------"},
+        {"file_path": "two-plus-five.bas", "name": "two-plus-five"}
+    ]
+}
