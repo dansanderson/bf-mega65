@@ -28,25 +28,29 @@
 ; Brackets are always in matched pairs, and can nest. A BF program with
 ; unmatched brackets is invalid and will not execute.
 ;
-; With this version of BF, you write BF programs using the MEGA65 BASIC line
+; With BF65, you write BF programs using the MEGA65 BASIC line
 ; editor. Any numbered line that begins with a BF character is recognized as a
 ; line of BF code. Any other BASIC line is ignored, and any character on a line
-; of BF code that isn't a BF character is also ignored. For example:
+; of BF code that isn't a BF character is also ignored. This allows you to
+; combine BASIC commands and BF code in the same listing, like so:
 ;
-; 10 rem this program adds 2 and 5.
-; 20 ++        set c0 to 2
-; 30 > +++++   set c1 to 5
-; 40 [ < + > - ]  loop: adding 1 to c0 and subtracting 1 from c1 until c1 is 0
+; 10 bank 0:bload "bf65":sys $1800:end
+; 20 rem this program adds 2 and 5.
+; 30 ++        set c0 to 2
+; 40 > +++++   set c1 to 5
+; 50 [ < + > - ]  loop: adding 1 to c0 and subtracting 1 from c1 until c1 is 0
 ;
-; To start BF, run this command:
-;    BANK 0:SYS $8000
+; The first line (line 10) consists of BASIC commands to load BF65, run it,
+; then end the program. BF65 ignores lines 10 and 20, and finds BF instructions
+; starting on line 30. BF65 ignores the commentary on lines 30-50 because they
+; do not contain BF instructions.
 ;
-; Because BF ignores non-BF BASIC lines, you can start your program with
-; BASIC commands to load BF65 from disk and execute it, then just run it like a
-; BASIC program. Be sure to include an END statement before the first BF line.
-;
-; 10 bload "bf65":bank 0:sys $8000:end
-; 20 ++>+++++[<+>-]
+; (Note that this is not a combination of BASIC and BF in a single language.
+; The BF interpreter runs when you call SYS $1800, and it starts from the
+; beginning of the listing and skips all of the non-BF characters. When you
+; type RUN, the BASIC interpreter assumes it will only see BASIC commands up to
+; the END statement. It would be cool to have BF run inline with BASIC, but
+; that's not what BF65 does.)
 ;
 ; A BF program can read a byte of input with the input (,) instruction. With
 ; this implementation, input is read from memory, up to 256 bytes starting at
@@ -61,13 +65,15 @@
 ; terminal output.
 ;
 ; When execution is complete, you can examine the final state of the BF data
-; region using the MONITOR. The data region starts at $8800.
+; region using the MEGA65 MONITOR. The data region starts at $8800.
 
 !cpu m65
 !to "bf65.prg", cbm
 
+_primm = $ff7d  ; print immediate built-in
+
 ; Starting addresses
-basicStart = $2001
+basicStart = $2001  ; TODO: get this from base page 0 instead of hard coding?
 inputBytes = $8500
 bracketPairs = $8600
 dataRegion = $8800
@@ -81,7 +87,7 @@ BP_inputC = $06  ; 1 byte
 BP_endOfData = $07  ; 1 byte
 BP_nextBracket = $08
 
-* = $8000  ; TODO: update this to ensure program ends before $84ff
+* = $1800
 
 ; User entry point
 StartBF:
@@ -109,13 +115,27 @@ InitInput:
 ; Initializes the interpreter
 ; On error A=$ff, else A=0
 Initialize:
+    ; Edge case: no BASIC program in memory
+    lda basicStart
+    bne +
+    lda #$00
+    tab
+    jsr _primm
+    !pet "no program in memory. ",0
+    lda #$16
+    tab
+    lda #$ff
+    rts   ; return with error
++
+
     jsr InitDC
     jsr InitInput
 
-    jsr BuildBracketList
-    beq +
-    rts   ; return with error
-+
+;     jsr BuildBracketList
+;     cmp #$00
+;     beq +
+;     rts   ; return with error
+; +
 
     ; Scan BASIC for first BF instruction, set PC
     ; TODO: needs a new "next BF line" routine; use this to skip non-BF lines
@@ -129,18 +149,30 @@ Initialize:
     bne +
     jsr NextPC
 +
-    rts
+
+    lda #$00
+    rts   ; return with success
 
 ; Tests the char under PC
 ; If A on null, A=0
 ; If A on non-BF char, A=$ff
 ; Else A=char
 LoadInstr:
+    ; lda BP_PC+1
+    ; jsr WriteHex
+    ; lda BP_PC
+    ; jsr WriteHex
+    ; lda #' '
+    ; jsr WriteChar
+    ; ldy #0
+    ; lda (BP_PC),y
+    ; jsr WriteHex
+    ; lda #13
+    ; jsr WriteChar
+
     ldy #0
     lda (BP_PC),y
-    bne +    ; null
-    rts
-+
+    beq ++    ; null
     cmp #$b1
     beq ++
     cmp #$b3
@@ -157,39 +189,126 @@ LoadInstr:
     beq ++
     cmp #$5d
     beq ++
+    bra +
+++  rts
++
+
+    ; << and >> are tokenized by BASIC 65 as FE 52 and FE 53. If PC is on FE,
+    ; look ahead one byte and convert (< = b3, > = b1). If PC is on 52 or 53,
+    ; look behind for FE and convert.
+    cmp #$fe
+    bne +
+    ldy #1
+    lda (BP_PC),y
+    cmp #$52
+    bne +++
+    ; lda #'!'    ; DEBUG: '!' = FE before 52 detected, returning B3
+    ; jsr WriteChar
+    lda #$b3
+    rts
++++ cmp #$53
+    bne +
+    ; lda #'@'    ; DEBUG: '@' = FE before 53 detected, returning B1
+    ; jsr WriteChar
+    lda #$b1
+    rts
+
++   cmp #$52
+    beq +++
+    cmp #$53
+    beq +++
+    bra +
++++
+    sec
+    lda BP_PC
+    sbc #1
+    sta BP_PC
+    lda BP_PC+1
+    sbc #0
+    sta BP_PC+1
+    ldy #0
+    lda (BP_PC),y
+    tax
+    clc
+    lda BP_PC
+    adc #1
+    sta BP_PC
+    lda BP_PC+1
+    adc #0
+    sta BP_PC+1
+    cpx #$fe
+    beq ++++
+    ; lda #'h'
+    ; jsr WriteChar   ; DEBUG 'h' = lookback did not find FE
+    ; txa
+    ; jsr WriteHex
+    ; lda #'h'
+    ; jsr WriteChar   ; DEBUG 'h' = lookback did not find FE
+    bra +
+++++
+    ldy #0
+    lda (BP_PC),y
+    cmp #$52
+    bne +++
+    ; lda #'*'
+    ; jsr WriteChar   ; DEBUG '*' = found second half of <<, returning B3
+    lda #$b3
+    rts
++++ cmp #$53
+    bne +
+    ; lda #'^'
+    ; jsr WriteChar   ; DEBUG '^' = found second half of >>, returning B1
+    lda #$b1
+    rts
+
++
     lda #$ff  ; non-BF char
 ++  rts
 
 ; Scans the PC to the next BF instruction
 ; Sets overflow flag if past end (PC on null), otherwise clears
 NextPC:
+    clv
     ; Current PC on null == end of program
     jsr LoadInstr
+    cmp #$00
     bne +
     bit BITThisToSetOverflow
     rts
 +
 
--   inc BP_PC
+-
+    ; lda #'.'
+    ; jsr WriteChar
+    inc BP_PC
     bne +
     inc BP_PC+1
 +   jsr LoadInstr
+    cmp #$00
     beq +   ; end of line
     cmp #$ff
     beq -   ; non-BF instruction
     bra ++
 
-+   ldy #1
++
+    ; lda #'&'
+    ; jsr WriteChar
+    ldy #2
     lda (BP_PC),y
     beq ++     ; end of program, leave PC on null
     clc        ; advance to first char of next line (PC+5)
-    lda #5
+    lda #4     ; (5-1, because loop above will +1)
     adc BP_PC
+    sta BP_PC
     lda #0
     adc BP_PC+1
+    sta BP_PC+1
     bra -
 
-++  clv
+++
+    ; lda #'#'
+    ; jsr WriteChar
+    clv
     rts
 
 ; Builds the bracket list
@@ -218,19 +337,28 @@ BuildBracketList:
 +
     ; - if any open brackets unclosed, bra ++
     rts
-++  jsr $ff7d   ; primm
+++
+    lda #$00
+    tab
+    jsr _primm
     !pet "error: mismatched brackets",0
+    lda #$16
+    tab
     lda #$ff
     rts
-+++ jsr $ff7d   ; primm
++++ lda #$00
+    tab
+    jsr _primm
     !pet "error: too many bracket pairs, max 128 pairs",0
+    lda #$16
+    tab
     lda #$ff
     rts
 
-; Performs the output instruction
-OutputInstr:
-    ldy #0
-    lda (BP_DC),y
+; Writes A to terminal
+; (Unnecessarily slow for long strings because it flips the base page twice.)
+; Clobbers A
+WriteChar:
     tax
     lda #$00     ; temporarily switch base page back to 0 for kernel call
     tab
@@ -238,6 +366,52 @@ OutputInstr:
     jsr $ffd2    ; bsout
     lda #$16
     tab
+    rts
+
+; Writes A to terminal as hexadecimal number
+; Clobbers A and Y
+_WriteHexLower:
+    and #$0f
+    clc
+    adc #$30
+    cmp #$3a
+    bcc +
+    clc
+    adc #$07
++   jsr WriteChar
+    rts
+WriteHex:
+    tay
+    ror
+    ror
+    ror
+    ror
+    jsr _WriteHexLower
+    tya
+    jsr _WriteHexLower
+    rts
+
+; Writes the PC and the value at the PC as hex to the terminal
+; Clobbers A and Y
+WritePC:
+    lda BP_PC+1
+    jsr WriteHex
+    lda BP_PC
+    jsr WriteHex
+    lda #32
+    jsr WriteChar
+    ldy #0
+    lda (BP_PC),y
+    jsr WriteHex
+    lda #13
+    jsr WriteChar
+    rts
+
+; Performs the output instruction
+OutputInstr:
+    ldy #0
+    lda (BP_DC),y
+    jsr WriteChar
     rts
 
 ; Performs the input instruction
@@ -260,6 +434,8 @@ InputInstr:
 ; Performs the increment DC instruction
 ; Sets overflow flag if DC is at end of range
 IncDCInstr:
+    clv
+
     ; If BP_DC == dataRegionEnd, set overflow and return
     lda #<dataRegionEnd
     cmp BP_DC
@@ -286,7 +462,7 @@ IncDCInstr:
     inc BP_highestDC+1
 +   lda #0
     ldy #0
-    sta (BP_DC),y
+    sta (BP_highestDC),y
 ++
     ; Inc BP_DC
     inc BP_DC
@@ -297,6 +473,8 @@ IncDCInstr:
 ; Performs the decrement DC instruction
 ; Sets overflow flag if DC is at beginning of range
 DecDCInstr:
+    clv
+
     ; If BP_DC == dataRegion, set overflow and return
     lda #<dataRegion
     cmp BP_DC
@@ -308,11 +486,17 @@ DecDCInstr:
     rts
 +
     ; Dec BP_DC
-    sec
     lda #1
-    sbc BP_DC
+    sta $fe
     lda #0
-    sbc BP_DC+1
+    sta $ff
+    lda BP_DC
+    sec
+    sbc $fe
+    sta BP_DC
+    lda BP_DC+1
+    sbc $ff
+    sta BP_DC+1
     rts
 
 ; Performs the increment data instruction
@@ -345,21 +529,41 @@ RightBracketInstr:
 
 ; Performs one instruction
 ; Sets overflow flag if past end, otherwise clears
+; A=$ff on error
 Step:
-    ldy #0
-    lda (BP_PC),y
-    bne +    ; if PC on null, do nothing
+    clv
+
+    ; DEBUG: write byte under PC as hex
+    ; jsr LoadInstr
+    ; jsr WriteHex
+    ; lda #' '
+    ; jsr WriteChar
+
+    jsr LoadInstr
+    cmp #$00
+    bne +    ; if PC on null, set overflow flag and return
+    ; lda #$5a
+    ; jsr WriteChar  ; DEBUG: "Z" -> Step called while PC on a null
+    bit BITThisToSetOverflow
     rts
 
 +   cmp #$b1
     bne ++
     jsr IncDCInstr
-    bra +
+    bvc +   ; return error on overflow
+    ; lda #65
+    ; jsr WriteChar  ; DEBUG: "A" -> IncDCInstr reported overflow
+    lda #$ff
+    rts
 
 ++  cmp #$b3
     bne ++
     jsr DecDCInstr
-    bra +
+    bvc +   ; return error on overflow
+    ; lda #66
+    ; jsr WriteChar  ; DEBUG: "B" -> DecDCInstr reported overflow
+    lda #$ff
+    rts
 
 ++  cmp #$aa
     bne ++
@@ -379,7 +583,11 @@ Step:
 ++  cmp #$2c
     bne ++
     jsr InputInstr
-    bra +
+    bvc +   ; return error on overflow
+    ; lda #67
+    ; jsr WriteChar  ; DEBUG: "C" -> InputInstr reported overflow
+    lda #$ff
+    rts
 
 ++  cmp #$5b
     bne ++
@@ -391,194 +599,37 @@ Step:
     jsr RightBracketInstr
 
 +   jsr NextPC
-    rts
-
-TEST_OutputInstr:
-    jsr InitDC
-    lda #65
-    ldy #0
-    sta (BP_DC),y
-    jsr OutputInstr
-    rts
-
-TEST_InputInstr:
-    lda #0
-    sta $3000
-    sta $3001
-    sta $3002
-    sta $3003
-
-    ; TEST inputBytes starts with a null
-    ; Result in $3000
-    jsr InitDC
-    jsr InitInput
-    lda #$ff
-    ldy #0
-    sta (BP_DC),y
-
-    lda #0
-    sta inputBytes
-    jsr InputInstr
-    lda BP_inputC
-    bne +     ; inputC hasn't moved
-    lda (BP_DC),y
-    cmp #$ff
-    bne +     ; value under DC hasn't changed
-    bra ++
-+   lda #1
-    sta $3000
-++
-
-    ; TEST inputBytes has one non-null value
-    ; Result in $3001
-    jsr InitDC
-    jsr InitInput
-    lda #$ff
-    ldy #0
-    sta (BP_DC),y
-
-    lda #1
-    sta inputBytes
-    lda #0
-    sta inputBytes+1
-    jsr InputInstr
-    lda BP_inputC
-    ldx #1
-    cmp #1
-    bne +    ; (1) inputC has advanced to 1
-    lda (BP_DC),y
-    ldx #2
-    cmp #1
-    bne +    ; (2) value under DC was overwritten to 1
-    jsr InputInstr
-    lda BP_inputC
-    ldx #3
-    cmp #1
-    bne +    ; (3) inputC has not advanced
-    ldy #0
-    lda (BP_DC),y
-    ldx #4
-    cmp #1
-    bne +    ; (4) value under DC hasn't changed
-    bra ++
-+   stx $3001
-++
-
-    ; TEST inputBytes is four bytes long
-    ; Result in $3002
-    jsr InitDC
-    jsr InitInput
-    lda #$ff
-    ldy #0
-    sta (BP_DC),y
-
-    lda #1
-    sta inputBytes
-    lda #3
-    sta inputBytes+1
-    lda #5
-    sta inputBytes+2
-    lda #7
-    sta inputBytes+3
-    lda #0
-    sta inputBytes+4
-    jsr InputInstr
-    ldy #0
-    lda (BP_DC),y
-    ldx #1
-    cmp #1
-    bne +    ; (1) value under DC was overwritten to 1
-    jsr InputInstr
-    ldy #0
-    lda (BP_DC),y
-    ldx #2
-    cmp #3
-    bne +    ; (2) value under DC was overwritten to 3
-    jsr InputInstr
-    ldy #0
-    lda (BP_DC),y
-    ldx #3
-    cmp #5
-    bne +    ; (3) value under DC was overwritten to 5
-    jsr InputInstr
-    ldy #0
-    lda (BP_DC),y
-    ldx #4
-    cmp #7
-    bne +    ; (4) value under DC was overwritten to 7
-    lda BP_inputC
-    ldx #5
-    cmp #4
-    bne +    ; (5) inputC is now 4
-    jsr InputInstr
-    ldy #0
-    lda (BP_DC),y
-    ldx #6
-    cmp #7
-    bne +    ; (6) value under DC hasn't changed
-    lda BP_inputC
-    ldx #7
-    cmp #4
-    bne +    ; (7) inputC has not advanced
-    bra ++
-+   stx $3002
-++
-
-    ; TEST inputBytes region is full of non-nulls
-    ; Result in $3003
-    jsr InitDC
-    jsr InitInput
-    lda #$ff
-    ldy #0
-    sta (BP_DC),y
-
-    lda #$bb
-    sta inputBytes
-    ldy #1
--   tya
-    sta inputBytes,y
-    iny
-    bne -
-
-    lda #0
-    sta $ff
--   ldx #1
-    lda $ff
-    cmp BP_inputC
-    bne +    ; (1) inputC advances for each InputInstr call
-    jsr InputInstr
-    inc $ff
-    bne -
-    jsr InputInstr
-    ldx #2
-    lda BP_inputC
-    bne +    ; (2) inputC has not advanced
-    ldy #0
-    ldx #3
-    lda (BP_DC),y
-    cmp #$ff
-    bne +    ; (3) value under DC is last read input
-    bra ++
-+   stx $3003
-++
-
-    rts
-
-TEST_IncDCInstr:
+    lda #$00    ; return success
     rts
 
 
 ; Perform user call: start
+t:
+!byte $0f
+t2:
+!byte $00
+
 ActuallyStartBF:
     lda #$16
     tab
 
-;    jsr Initialize
-;-   jsr Step
-;    bvc -
+    jsr Initialize
+    cmp #$ff
+    beq +++
 
-    jsr TEST_IncDCInstr
+-   jsr Step
+    cmp #$ff
+    beq +++
+    bvc -
 
+    bra ++
++++
+    lda #$00
+    tab
+    jsr _primm
+    !pet "bf65 aborted.",13,0
+    rts
+++
     lda #$00
     tab
     rts
