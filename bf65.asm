@@ -31,8 +31,13 @@
 ; With BF65, you write BF programs using the MEGA65 BASIC line
 ; editor. Any numbered line that begins with a BF character is recognized as a
 ; line of BF code. Any other BASIC line is ignored, and any character on a line
-; of BF code that isn't a BF character is also ignored. This allows you to
-; combine BASIC commands and BF code in the same listing, like so:
+; of BF code that isn't a BF character is also ignored. [TODO: skipping of
+; lines that don't begin with a BF instruction is not implemented yet. Right
+; now it will recognize any BF character on any line as a BF instruction, and
+; ignore all other characters.]
+;
+; This allows you to combine BASIC commands and BF code in the same listing,
+; like so:
 ;
 ; 10 bank 0:bload "bf65":sys $1800:end
 ; 20 rem this program adds 2 and 5.
@@ -73,9 +78,10 @@
 _primm = $ff7d  ; print immediate built-in
 
 ; Starting addresses
-basicStart = $2001  ; TODO: get this from base page 0 instead of hard coding?
+basicStart = $2001  ; TODO: get this from base page 0 instead of hard coding
 inputBytes = $8500
 bracketPairs = $8600
+bracketPairsEnd = $8800
 dataRegion = $8800
 dataRegionEnd = $ffff
 
@@ -86,6 +92,7 @@ BP_DC = $04
 BP_inputC = $06  ; 1 byte
 BP_endOfData = $07  ; 1 byte
 BP_nextBracket = $08
+BP_bracketC = $0a
 
 * = $1800
 
@@ -131,11 +138,11 @@ Initialize:
     jsr InitDC
     jsr InitInput
 
-;     jsr BuildBracketList
-;     cmp #$00
-;     beq +
-;     rts   ; return with error
-; +
+    jsr BuildBracketPairs
+    cmp #$00
+    beq +
+    rts   ; return with error
++
 
     ; Scan BASIC for first BF instruction, set PC
     ; TODO: needs a new "next BF line" routine; use this to skip non-BF lines
@@ -158,18 +165,6 @@ Initialize:
 ; If A on non-BF char, A=$ff
 ; Else A=char
 LoadInstr:
-    ; lda BP_PC+1
-    ; jsr WriteHex
-    ; lda BP_PC
-    ; jsr WriteHex
-    ; lda #' '
-    ; jsr WriteChar
-    ; ldy #0
-    ; lda (BP_PC),y
-    ; jsr WriteHex
-    ; lda #13
-    ; jsr WriteChar
-
     ldy #0
     lda (BP_PC),y
     beq ++    ; null
@@ -202,14 +197,10 @@ LoadInstr:
     lda (BP_PC),y
     cmp #$52
     bne +++
-    ; lda #'!'    ; DEBUG: '!' = FE before 52 detected, returning B3
-    ; jsr WriteChar
     lda #$b3
     rts
 +++ cmp #$53
     bne +
-    ; lda #'@'    ; DEBUG: '@' = FE before 53 detected, returning B1
-    ; jsr WriteChar
     lda #$b1
     rts
 
@@ -237,27 +228,15 @@ LoadInstr:
     adc #0
     sta BP_PC+1
     cpx #$fe
-    beq ++++
-    ; lda #'h'
-    ; jsr WriteChar   ; DEBUG 'h' = lookback did not find FE
-    ; txa
-    ; jsr WriteHex
-    ; lda #'h'
-    ; jsr WriteChar   ; DEBUG 'h' = lookback did not find FE
-    bra +
-++++
+    bne +
     ldy #0
     lda (BP_PC),y
     cmp #$52
     bne +++
-    ; lda #'*'
-    ; jsr WriteChar   ; DEBUG '*' = found second half of <<, returning B3
     lda #$b3
     rts
 +++ cmp #$53
     bne +
-    ; lda #'^'
-    ; jsr WriteChar   ; DEBUG '^' = found second half of >>, returning B1
     lda #$b1
     rts
 
@@ -277,10 +256,7 @@ NextPC:
     rts
 +
 
--
-    ; lda #'.'
-    ; jsr WriteChar
-    inc BP_PC
+-   inc BP_PC
     bne +
     inc BP_PC+1
 +   jsr LoadInstr
@@ -290,10 +266,7 @@ NextPC:
     beq -   ; non-BF instruction
     bra ++
 
-+
-    ; lda #'&'
-    ; jsr WriteChar
-    ldy #2
++   ldy #2
     lda (BP_PC),y
     beq ++     ; end of program, leave PC on null
     clc        ; advance to first char of next line (PC+5)
@@ -305,15 +278,44 @@ NextPC:
     sta BP_PC+1
     bra -
 
-++
-    ; lda #'#'
-    ; jsr WriteChar
-    clv
+++  clv
     rts
 
 ; Builds the bracket list
 ; On error, A=$ff, else A=0
-BuildBracketList:
+BuildBracketPairs:
+    ; bracketPairs is a list of 128 structures storing two 16-bit addresses: an
+    ; opening bracket and a matching closing bracket. nextBracket points to the
+    ; address of the next free structure, or bracketPairsEnd if the list is full.
+
+    ; Fill bracketPairs to (bracketPairsEnd-1) with zeroes
+    lda #<bracketPairs
+    sta BP_bracketC
+    lda #>bracketPairs
+    sta BP_bracketC+1
+-   ldy #0
+    lda #0
+    sta (BP_bracketC),y
+    iny
+    sta (BP_bracketC),y
+    iny
+    sta (BP_bracketC),y
+    iny
+    sta (BP_bracketC),y
+    clc
+    lda BP_bracketC
+    adc #4
+    sta BP_bracketC
+    lda BP_bracketC+1
+    adc #0
+    sta BP_bracketC+1
+    cmp #>bracketPairsEnd    ; (assumes bracketPairsEnd is $xx00)
+    bne -
+
+    lda #'B'
+    jsr WriteChar  ; DEBUG: BuildBracketList start
+
+    ; Scan program for brackets
     lda #<(basicStart + 4)
     sta BP_PC
     lda #>(basicStart + 4)
@@ -322,34 +324,119 @@ BuildBracketList:
     sta BP_nextBracket
     lda #>bracketPairs
     sta BP_nextBracket+1
-    jsr LoadInstr
--   bvs +
-    ; TODO
-    ;   - if open bracket
-    ;     - if BP_nextBracket==dataRegion, bra +++
-    ;     - else add to end of bracket list, inc BP_nextBracket
-    ;   - if closed bracket
-    ;     - find latest unclosed bracket in list
-    ;       - if not found, bra ++
-    ;       - else set it
+--- jsr LoadInstr
+    cmp #$00
+    beq +
+    cmp #$5b   ; open bracket: add to end of bracket list
+    bne ++
+    lda #'['
+    jsr WriteChar  ; DEBUG: BuildBracketList saw open bracket
+    ; if BP_nextBracket==bracketPairsEnd, error: too many brackets
+    lda BP_nextBracket
+    cmp #<bracketPairsEnd
+    bne ++++
+    lda BP_nextBracket+1
+    cmp #>bracketPairsEnd
+    bne ++++
+    jmp _ErrTooManyBrackets
+++++
+    ; add to end of bracket list, BP_nextBracket += 4
+    ldy #0
+    lda BP_PC
+    sta (BP_nextBracket),y
+    ldy #1
+    lda BP_PC+1
+    sta (BP_nextBracket),y
+    clc
+    lda BP_nextBracket
+    adc #4
+    sta BP_nextBracket
+    lda BP_nextBracket+1
+    adc #0
+    sta BP_nextBracket+1
+    bra +++
+
+++  cmp #$5d   ; close bracket: set on latest unclosed bracket
+    bne +++
+    lda #']'
+    jsr WriteChar  ; DEBUG: BuildBracketList saw close bracket
+    lda BP_nextBracket
+    sta BP_bracketC
+    lda BP_nextBracket+1
+    sta BP_bracketC+1
+-   sec
+    lda BP_bracketC
+    sbc #4
+    sta BP_bracketC
+    lda BP_bracketC+1
+    sbc #0
+    sta BP_bracketC+1
+    cmp #>bracketPairs  ; (assumes bracketPairs starts at $xx00)
+    bpl ++
+    jmp _ErrMismatchedBrackets
+++  ldy #3
+    lda (BP_bracketC),y
+    cmp #$00
+    bne -
+    lda BP_PC+1
+    sta (BP_bracketC),y
+    ldy #2
+    lda BP_PC
+    sta (BP_bracketC),y
+
++++
+    lda #'.'
+    jsr WriteChar
     jsr NextPC
-    bra -
+    bra ---
+
 +
-    ; - if any open brackets unclosed, bra ++
+    ; if any open brackets unclosed, error: mismatched brackets
+    lda #<bracketPairs
+    sta BP_bracketC
+    lda #>bracketPairs
+    sta BP_bracketC+1
+-   ldy #1
+    lda (BP_bracketC),y
+    cmp #$00
+    beq +
+    ldy #3
+    lda (BP_bracketC),y
+    cmp #$00
+    beq ++
+    clc
+    lda BP_bracketC
+    adc #4
+    sta BP_bracketC
+    lda BP_bracketC+1
+    adc #0
+    sta BP_bracketC+1
+    cmp #>bracketPairsEnd    ; (assumes bracketPairsEnd is $xx00)
+    bne -
+    bra +
+++  jmp _ErrMismatchedBrackets
+
++   lda #'C'
+    jsr WriteChar  ; DEBUG: BuildBracketList end
+
+    lda #$00
     rts
-++
+
+_ErrMismatchedBrackets:
     lda #$00
     tab
     jsr _primm
-    !pet "error: mismatched brackets",0
+    !pet "error: mismatched brackets. ",0
     lda #$16
     tab
     lda #$ff
     rts
-+++ lda #$00
+
+_ErrTooManyBrackets:
+    lda #$00
     tab
     jsr _primm
-    !pet "error: too many bracket pairs, max 128 pairs",0
+    !pet "error: too many bracket pairs, max 128 pairs. ",0
     lda #$16
     tab
     lda #$ff
@@ -370,6 +457,7 @@ WriteChar:
 
 ; Writes A to terminal as hexadecimal number
 ; Clobbers A and Y
+; (Only used for debugging)
 _WriteHexLower:
     and #$0f
     clc
@@ -393,6 +481,7 @@ WriteHex:
 
 ; Writes the PC and the value at the PC as hex to the terminal
 ; Clobbers A and Y
+; (Only used for debugging)
 WritePC:
     lda BP_PC+1
     jsr WriteHex
@@ -533,17 +622,9 @@ RightBracketInstr:
 Step:
     clv
 
-    ; DEBUG: write byte under PC as hex
-    ; jsr LoadInstr
-    ; jsr WriteHex
-    ; lda #' '
-    ; jsr WriteChar
-
     jsr LoadInstr
     cmp #$00
     bne +    ; if PC on null, set overflow flag and return
-    ; lda #$5a
-    ; jsr WriteChar  ; DEBUG: "Z" -> Step called while PC on a null
     bit BITThisToSetOverflow
     rts
 
@@ -551,19 +632,13 @@ Step:
     bne ++
     jsr IncDCInstr
     bvc +   ; return error on overflow
-    ; lda #65
-    ; jsr WriteChar  ; DEBUG: "A" -> IncDCInstr reported overflow
-    lda #$ff
-    rts
+    jmp _ErrOutOfRange
 
 ++  cmp #$b3
     bne ++
     jsr DecDCInstr
     bvc +   ; return error on overflow
-    ; lda #66
-    ; jsr WriteChar  ; DEBUG: "B" -> DecDCInstr reported overflow
-    lda #$ff
-    rts
+    jmp _ErrOutOfRange
 
 ++  cmp #$aa
     bne ++
@@ -583,11 +658,8 @@ Step:
 ++  cmp #$2c
     bne ++
     jsr InputInstr
-    bvc +   ; return error on overflow
-    ; lda #67
-    ; jsr WriteChar  ; DEBUG: "C" -> InputInstr reported overflow
-    lda #$ff
-    rts
+    ; ignore overflow: end of region is EOF
+    bra +
 
 ++  cmp #$5b
     bne ++
@@ -602,13 +674,17 @@ Step:
     lda #$00    ; return success
     rts
 
+_ErrOutOfRange:
+    lda #$00
+    tab
+    jsr _primm
+    !pet "error: data cursor out of range. ",0
+    lda #$16
+    tab
+    lda #$ff
+    rts
 
 ; Perform user call: start
-t:
-!byte $0f
-t2:
-!byte $00
-
 ActuallyStartBF:
     lda #$16
     tab
