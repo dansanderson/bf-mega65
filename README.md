@@ -22,8 +22,8 @@ character.
 
 - `>` Increment the data pointer.
 - `<` Decrement the data pointer.
-- `-` Increment the byte at the data pointer.
-- `*` Decrement the byte at the data pointer.
+- `+` Increment the byte at the data pointer.
+- `-` Decrement the byte at the data pointer.
 - `.` Output the byte at the data pointer.
 - `,` Accept one byte of input, and store it at the data pointer.
 - `[` If the byte at the data pointer is zero, jump to the instruction after the matching `]`.
