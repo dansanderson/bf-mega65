@@ -121,8 +121,11 @@ condition and not a value in the input stream.)
 
 The data cursor manipulated by the `<` and `>` instructions exits the program
 with an error message if the cursor goes outside the data range. The data range
-extends from $8800 to $ffff (with the ROM and I/O registers banked out of those
-addresses), providing the standard 30 Kb BF array size.
+extends from $8800 to $ffff, providing the standard 30 Kb BF array size.
+
+Note: bf65 currently doesn't bank out the VIC registers in that memory region.
+If your program needs the full data space, you can use BASIC commands to change
+the banking, or you can pester me and I can figure it out. 😄
 
 The data increment and decrement instructions `+` and `-` modify the byte value
 under the data cursor. The value wraps around at each end of the byte value
