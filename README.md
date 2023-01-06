@@ -123,10 +123,10 @@ The data cursor manipulated by the `<` and `>` instructions exits the program
 with an error message if the cursor goes outside the data range. The data range
 extends from $8800 to $ffff, providing the standard 30 Kb BF array size.
 
-Note: bf65 currently doesn't bank out the VIC registers in that memory region.
-If your program needs the full data space, you can use BASIC commands to change
-the banking, or you can pester me and I can figure it out. I just got lazy. —I
-mean, uh, it's a feature! You can manipulate I/O registers from BF! 😜
+> Note: bf65 currently doesn't bank out the VIC registers in that memory region.
+> If your program needs the full data space, you can use BASIC commands to change
+> the banking, or you can pester me and I can figure it out. I just got lazy. —I
+> mean, uh, it's a feature! You can manipulate I/O registers from BF! 😜
 
 The data increment and decrement instructions `+` and `-` modify the byte value
 under the data cursor. The value wraps around at each end of the byte value
@@ -135,6 +135,18 @@ silently without error.
 
 All output (including error messages) uses the kernel's terminal output stream.
 You can redirect this output to a file or printer using the CMD command.
+Outputting the value 10 actually outputs a PETSCII 13 to achieve the same
+effect as a traditional BF interpreter (ASCII newline = PETSCII carriage
+return).
+
+Output otherwise assumes values are PETSCII. This causes BF programs that print
+ASCII messages to flip the case of letters or use PETSCII glyphs for lowercase,
+depending on which character mode you're in. I don't plan to change this.
+
+> The`hello.bas` demo is an example: the code is from Wikipedia and prints "Hello
+> world!" in ASCII, which appears as something else in PETSCII. The example is
+> intentionally cryptic and I'm too lazy to write another version that outputs
+> the PETSCII equivalent. If you write one, send me yours and I'll include it.
 
 ## Building BF65
 

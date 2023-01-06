@@ -88,7 +88,7 @@ InitInput:
 ; On error A=$ff, else A=0
 Initialize:
     ; Edge case: no BASIC program in memory
-    lda basicStart
+    lda basicStart+1
     bne +
     jmp _ErrNoProgamInMemory
 +   jsr InitDC
@@ -211,7 +211,6 @@ NextPC:
 +
 
 -   +incPC 1
-+
 --  jsr LoadInstr
     cmp #$00
     beq +   ; end of line
