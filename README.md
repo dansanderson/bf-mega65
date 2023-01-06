@@ -125,7 +125,8 @@ extends from $8800 to $ffff, providing the standard 30 Kb BF array size.
 
 Note: bf65 currently doesn't bank out the VIC registers in that memory region.
 If your program needs the full data space, you can use BASIC commands to change
-the banking, or you can pester me and I can figure it out. 😄
+the banking, or you can pester me and I can figure it out. I just got lazy. —I
+mean, uh, it's a feature! You can manipulate I/O registers from BF! 😜
 
 The data increment and decrement instructions `+` and `-` modify the byte value
 under the data cursor. The value wraps around at each end of the byte value
